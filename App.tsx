@@ -25,11 +25,12 @@ import {
   SafeAreaView,
   StatusBar,
   StyleSheet,
-  Text,
   View,
 } from 'react-native';
 import {RNCamera} from 'react-native-camera';
+import {CameraContainer} from './src/CameraContainer';
 import {DetectedBox} from './src/DetectedBox';
+import {Header} from './src/Header';
 
 declare const global: {HermesInternal: null | {}};
 
@@ -55,13 +56,6 @@ const classesDir = {
 };
 const windowWidth = Dimensions.get('window').width;
 const imageWidth = windowWidth;
-
-const Header = () => (
-  <View style={styles.header}>
-    <Text style={styles.title}>Helmet detection</Text>
-    <Text style={styles.description}>done by react native</Text>
-  </View>
-);
 
 const App = () => {
   const [predictedResult, setPredictedResult] = useState<{
@@ -114,6 +108,42 @@ const App = () => {
     },
     [isInferencing, model],
   );
+
+  const onRefreshButtonPress = () => {
+    setImageUri(null);
+    setDetectionObjects([]);
+    setPredictedResult({
+      boxes: null,
+      scores: null,
+      classes: null,
+    });
+  };
+
+  const onShootButtonPress = async () => {
+    if (
+      cameraRef.current &&
+      cameraRef.current.getStatus() === 'READY' &&
+      isReadyToCapture
+    ) {
+      setIsReadyToCapture(false);
+      const data = await cameraRef.current.takePictureAsync({
+        width: 1080,
+        quality: 0.8,
+        fixOrientation: true,
+      });
+      setIsReadyToCapture(true);
+      setImageUri(data.uri);
+    }
+  };
+
+  const onInferenceButtonPress = async () => {
+    setIsInferencing(true);
+    const response = await fetch(imageUri, {}, {isBinary: true});
+    const imageDataArrayBuffer = await response.arrayBuffer();
+    const imageData = new Uint8Array(imageDataArrayBuffer);
+    const imageTensor = decodeJpeg(imageData);
+    await inference(imageTensor);
+  };
 
   useEffect(() => {
     const loadModel = async () => {
@@ -173,24 +203,10 @@ const App = () => {
         <Header />
         <View style={styles.body}>
           {imageUri === null && (
-            <View style={styles.cameraContainer}>
-              <RNCamera
-                ref={cameraRef}
-                ratio={'1:1'}
-                style={{width: imageWidth, height: imageWidth}}
-                flashMode={'off'}
-                useNativeZoom={true}
-                captureAudio={false}
-                playSoundOnCapture={false}
-                onCameraReady={() => setIsReadyToCapture(true)}
-                androidCameraPermissionOptions={{
-                  title: 'Access to camera',
-                  message: 'Allow this app to access camera to take photo',
-                  buttonPositive: 'accept',
-                  buttonNegative: 'deny',
-                }}
-              />
-            </View>
+            <CameraContainer
+              ref={cameraRef}
+              onCameraReady={() => setIsReadyToCapture(true)}
+            />
           )}
           {imageUri !== null && (
             <View style={styles.imageContainer}>
@@ -214,35 +230,12 @@ const App = () => {
               <Button
                 title={'refresh'}
                 disabled={!imageUri}
-                onPress={() => {
-                  setImageUri(null);
-                  setDetectionObjects([]);
-                  setPredictedResult({
-                    boxes: null,
-                    scores: null,
-                    classes: null,
-                  });
-                }}
+                onPress={onRefreshButtonPress}
               />
               <Button
                 title={'shoot'}
                 disabled={!!imageUri || !model}
-                onPress={async () => {
-                  if (
-                    cameraRef.current &&
-                    cameraRef.current.getStatus() === 'READY' &&
-                    isReadyToCapture
-                  ) {
-                    setIsReadyToCapture(false);
-                    const data = await cameraRef.current.takePictureAsync({
-                      width: 1080,
-                      quality: 0.8,
-                      fixOrientation: true,
-                    });
-                    setIsReadyToCapture(true);
-                    setImageUri(data.uri);
-                  }
-                }}
+                onPress={onShootButtonPress}
               />
               {isInferencing ? (
                 <ActivityIndicator size={'large'} />
@@ -250,18 +243,7 @@ const App = () => {
                 <Button
                   title={'infer'}
                   disabled={!imageUri || isInferencing}
-                  onPress={async () => {
-                    setIsInferencing(true);
-                    const response = await fetch(
-                      imageUri,
-                      {},
-                      {isBinary: true},
-                    );
-                    const imageDataArrayBuffer = await response.arrayBuffer();
-                    const imageData = new Uint8Array(imageDataArrayBuffer);
-                    const imageTensor = decodeJpeg(imageData);
-                    await inference(imageTensor);
-                  }}
+                  onPress={onInferenceButtonPress}
                 />
               )}
             </View>
