@@ -18,6 +18,7 @@ import {
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Button,
   Dimensions,
   Image,
@@ -40,15 +41,6 @@ const modelWeights = [
   require('./assets/model_v3/group1-shard4of5.bin'),
   require('./assets/model_v3/group1-shard5of5.bin'),
 ];
-let MODEL: unknown = null;
-(async () => {
-  try {
-    await tf.ready();
-    MODEL = await loadGraphModel(bundleResourceIO(modelJSON, modelWeights));
-  } catch (error) {
-    console.error(error);
-  }
-})();
 
 const threshold = 0.5;
 const classesDir = {
@@ -88,18 +80,24 @@ const App = () => {
   const [imageUri, setImageUri] = useState(null);
   const [isReadyToCapture, setIsReadyToCapture] = useState(false);
   const [isInferencing, setIsInferencing] = useState(false);
+
+  const [model, setModel] = useState<unknown>();
+
   const cameraRef = useRef();
 
   const inference = useCallback(
     async (imageTensor: tf.Tensor3D) => {
+      if (!model) return;
       if (!imageTensor || isInferencing) return;
       try {
         tf.engine().startScope();
         console.log('inference begin');
         const startTime = new Date().getTime();
-        const predictions: tf.Tensor<tf.Rank>[] = await MODEL.executeAsync(
+
+        const predictions: tf.Tensor<tf.Rank>[] = await model.executeAsync(
           imageTensor.transpose([0, 1, 2]).expandDims(),
         );
+
         const endTime = new Date().getTime();
         console.log(`inference end, ETC: ${endTime - startTime}ms`);
 
@@ -109,14 +107,30 @@ const App = () => {
 
         setPredictedResult({boxes, scores, classes});
       } catch (error) {
-        console.error(error);
+        Alert.alert('', error, [{text: 'close', onPress: () => null}]);
       } finally {
         tf.engine().endScope();
         setIsInferencing(false);
       }
     },
-    [isInferencing],
+    [isInferencing, model],
   );
+
+  useEffect(() => {
+    const loadModel = async () => {
+      try {
+        await tf.ready();
+        const loadedModel = await loadGraphModel(
+          bundleResourceIO(modelJSON, modelWeights),
+        );
+        setModel(loadedModel);
+      } catch (error) {
+        Alert.alert('', error, [{text: 'close', onPress: () => null}]);
+      }
+    };
+
+    loadModel();
+  }, []);
 
   useEffect(() => {
     if (!predictedResult || !predictedResult.scores) return;
@@ -213,7 +227,7 @@ const App = () => {
               />
               <Button
                 title={'shoot'}
-                disabled={!!imageUri}
+                disabled={!!imageUri || !model}
                 onPress={async () => {
                   if (
                     cameraRef.current &&
