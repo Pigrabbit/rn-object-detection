@@ -17,9 +17,7 @@ import {
 } from '@tensorflow/tfjs-react-native';
 import React, {useCallback, useEffect, useRef, useState} from 'react';
 import {
-  ActivityIndicator,
   Alert,
-  Button,
   Dimensions,
   Image,
   SafeAreaView,
@@ -27,8 +25,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
-import {RNCamera} from 'react-native-camera';
 import {CameraContainer} from './src/CameraContainer';
+import {DetectedObject} from './src/Context';
 import {ControlPanel} from './src/ControlPanel';
 import {DetectedBox} from './src/DetectedBox';
 import {Header} from './src/Header';
@@ -60,10 +58,10 @@ const imageWidth = windowWidth;
 
 const App = () => {
   const [predictedResult, setPredictedResult] = useState<{
-    boxes: unknown;
-    scores: unknown;
-    classes: unknown;
-  }>({boxes: null, scores: null, classes: null});
+    boxes: number[][][];
+    scores: number[][];
+    classes: Int32Array;
+  }>({boxes: [[[]]], scores: [[]], classes: new Int32Array()});
   const [detectionObjects, setDetectionObjects] = useState<
     {
       bbox: number[];
@@ -72,10 +70,11 @@ const App = () => {
       score: string;
     }[]
   >([]);
+
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isReadyToCapture, setIsReadyToCapture] = useState(false);
   const [isInferencing, setIsInferencing] = useState(false);
-  const [model, setModel] = useState<unknown>();
+  const [model, setModel] = useState<tf.GraphModel | null>(null);
 
   const cameraRef = useRef();
 
@@ -88,16 +87,16 @@ const App = () => {
         console.log('inference begin');
         const startTime = new Date().getTime();
 
-        const predictions: tf.Tensor<tf.Rank>[] = await model.executeAsync(
+        const predictions: tf.Tensor<tf.Rank>[] = (await model.executeAsync(
           imageTensor.transpose([0, 1, 2]).expandDims(),
-        );
+        )) as tf.Tensor<tf.Rank>[];
 
         const endTime = new Date().getTime();
         console.log(`inference end, ETC: ${endTime - startTime}ms`);
 
-        const boxes = predictions[5].arraySync();
-        const scores = predictions[1].arraySync();
-        const classes = predictions[0].dataSync();
+        const boxes = predictions[5].arraySync() as number[][][];
+        const scores = predictions[1].arraySync() as number[][];
+        const classes = predictions[0].dataSync() as Int32Array;
 
         setPredictedResult({boxes, scores, classes});
       } catch (error) {
@@ -114,9 +113,9 @@ const App = () => {
     setImageUri(null);
     setDetectionObjects([]);
     setPredictedResult({
-      boxes: null,
-      scores: null,
-      classes: null,
+      boxes: [[[]]],
+      scores: [[]],
+      classes: new Int32Array(),
     });
   };
 
@@ -138,7 +137,9 @@ const App = () => {
   };
 
   const onInferenceButtonPress = async () => {
+    if (!imageUri) return;
     setIsInferencing(true);
+
     const response = await fetch(imageUri, {}, {isBinary: true});
     const imageDataArrayBuffer = await response.arrayBuffer();
     const imageData = new Uint8Array(imageDataArrayBuffer);
@@ -166,10 +167,7 @@ const App = () => {
     if (!predictedResult || !predictedResult.scores) return;
 
     const {boxes, scores, classes} = predictedResult;
-    // console.log(scores);
-    // console.log(classes);
-    // console.log(boxes);
-    const currentDetectionObjects = [];
+    const currentDetectionObjects: DetectedObject[] = [];
 
     scores[0].forEach((score, idx) => {
       if (score > threshold) {
