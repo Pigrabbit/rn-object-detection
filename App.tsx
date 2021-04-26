@@ -80,7 +80,6 @@ const App = () => {
   const [imageUri, setImageUri] = useState(null);
   const [isReadyToCapture, setIsReadyToCapture] = useState(false);
   const [isInferencing, setIsInferencing] = useState(false);
-
   const [model, setModel] = useState<unknown>();
 
   const cameraRef = useRef();

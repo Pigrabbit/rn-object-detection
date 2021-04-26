@@ -1,5 +1,5 @@
 import React from 'react';
-import {Text, View} from 'react-native';
+import {StyleSheet, Text, View} from 'react-native';
 interface Props {
   x: number;
   y: number;
@@ -16,30 +16,36 @@ export const DetectedBox: React.FC<Props> = ({
   score,
   label,
 }) => {
+  const color = label === 'With Helmet' ? '#00ffff' : '#f78f04';
   return (
     <View
-      style={{
-        position: 'absolute',
-        left: x,
-        top: y,
-        width,
-        height,
-        borderColor: label === 'With Helmet' ? '#00ffff' : '#f78f04',
-        borderWidth: 4,
-        zIndex: 1,
-      }}>
+      style={[
+        styles.boundingBox,
+        {width, height, left: x, top: y, borderColor: color},
+      ]}>
       <View
         style={{
-          backgroundColor: label === 'With Helmet' ? '#00ffff' : '#f78f04',
+          backgroundColor: color,
           transform: [{translateY: height}],
         }}>
-        <Text style={{fontSize: 8, color: 'black', textAlign: 'center'}}>
-          {label}
-        </Text>
-        <Text style={{fontSize: 8, color: 'black', textAlign: 'center'}}>{`${(
-          parseFloat(score) * 100
-        ).toFixed(2)}%`}</Text>
+        <Text style={styles.labelText}>{label}</Text>
+        <Text style={styles.labelText}>{`${(parseFloat(score) * 100).toFixed(
+          2,
+        )}%`}</Text>
       </View>
     </View>
   );
 };
+
+const styles = StyleSheet.create({
+  boundingBox: {
+    position: 'absolute',
+    borderWidth: 4,
+    zIndex: 1,
+  },
+  labelText: {
+    fontSize: 8,
+    color: 'black',
+    textAlign: 'center',
+  },
+});
