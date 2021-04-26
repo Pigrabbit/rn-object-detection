@@ -29,6 +29,7 @@ import {
 } from 'react-native';
 import {RNCamera} from 'react-native-camera';
 import {CameraContainer} from './src/CameraContainer';
+import {ControlPanel} from './src/ControlPanel';
 import {DetectedBox} from './src/DetectedBox';
 import {Header} from './src/Header';
 
@@ -71,7 +72,7 @@ const App = () => {
       score: string;
     }[]
   >([]);
-  const [imageUri, setImageUri] = useState(null);
+  const [imageUri, setImageUri] = useState<string | null>(null);
   const [isReadyToCapture, setIsReadyToCapture] = useState(false);
   const [isInferencing, setIsInferencing] = useState(false);
   const [model, setModel] = useState<unknown>();
@@ -225,29 +226,14 @@ const App = () => {
               <Image source={{uri: imageUri}} style={styles.image} />
             </View>
           )}
-          <View style={styles.controlPanel}>
-            <View style={styles.buttonList}>
-              <Button
-                title={'refresh'}
-                disabled={!imageUri}
-                onPress={onRefreshButtonPress}
-              />
-              <Button
-                title={'shoot'}
-                disabled={!!imageUri || !model}
-                onPress={onShootButtonPress}
-              />
-              {isInferencing ? (
-                <ActivityIndicator size={'large'} />
-              ) : (
-                <Button
-                  title={'infer'}
-                  disabled={!imageUri || isInferencing}
-                  onPress={onInferenceButtonPress}
-                />
-              )}
-            </View>
-          </View>
+          <ControlPanel
+            imageUri={imageUri}
+            isInferencing={isInferencing}
+            model={model}
+            onRefreshButtonPress={onRefreshButtonPress}
+            onShootButtonPress={onShootButtonPress}
+            onInferenceButtonPress={onInferenceButtonPress}
+          />
         </View>
       </SafeAreaView>
     </>
@@ -259,19 +245,6 @@ const styles = StyleSheet.create({
     height: '100%',
     flex: 1,
   },
-  header: {
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-  },
-  title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    textAlign: 'center',
-  },
-  description: {
-    fontSize: 16,
-    textAlign: 'center',
-  },
   body: {
     alignItems: 'center',
     flex: 1,
@@ -279,30 +252,9 @@ const styles = StyleSheet.create({
   imageContainer: {
     justifyContent: 'center',
   },
-  cameraContainer: {
-    justifyContent: 'center',
-  },
   image: {
     width: imageWidth,
     height: imageWidth,
-  },
-  controlPanel: {
-    flex: 1,
-    justifyContent: 'center',
-  },
-  buttonList: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: windowWidth,
-    paddingHorizontal: 24,
-  },
-  spinnerContainer: {
-    position: 'absolute',
-    justifyContent: 'center',
-    width: '100%',
-    height: '100%',
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    zIndex: 1,
   },
 });
 
