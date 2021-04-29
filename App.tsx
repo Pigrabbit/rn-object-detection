@@ -9,105 +9,64 @@
  */
 
 import * as tf from '@tensorflow/tfjs';
-import {loadGraphModel} from '@tensorflow/tfjs';
-import {
-  bundleResourceIO,
-  decodeJpeg,
-  fetch,
-} from '@tensorflow/tfjs-react-native';
-import React, {useCallback, useEffect, useRef, useState} from 'react';
-import {
-  Alert,
-  Dimensions,
-  Image,
-  SafeAreaView,
-  StatusBar,
-  StyleSheet,
-  View,
-} from 'react-native';
-import {CameraContainer} from './src/CameraContainer';
-import {DetectedObject} from './src/Context';
-import {ControlPanel} from './src/ControlPanel';
-import {DetectedBox} from './src/DetectedBox';
-import {Header} from './src/Header';
+import { loadGraphModel } from '@tensorflow/tfjs';
+import { bundleResourceIO, decodeJpeg, fetch } from '@tensorflow/tfjs-react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Alert, Image, SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
+import { RNCamera } from 'react-native-camera';
+import { CameraContainer } from './src/CameraContainer';
+import { classesDir, modelJSON, modelWeights, threshold, windowWidth } from './src/constants';
+import { ControlPanel } from './src/ControlPanel';
+import { DetectedBox } from './src/DetectedBox';
+import { Header } from './src/Header';
+import { DetectedObject, Prediction } from './src/types';
 
-declare const global: {HermesInternal: null | {}};
+declare const global: { HermesInternal: null | {} };
 
-const modelJSON = require('./assets/model_v3/model.json');
-const modelWeights = [
-  require('./assets/model_v3/group1-shard1of5.bin'),
-  require('./assets/model_v3/group1-shard2of5.bin'),
-  require('./assets/model_v3/group1-shard3of5.bin'),
-  require('./assets/model_v3/group1-shard4of5.bin'),
-  require('./assets/model_v3/group1-shard5of5.bin'),
-];
-
-const threshold = 0.5;
-const classesDir = {
-  1: {
-    name: 'With Helmet',
-    id: 1,
-  },
-  2: {
-    name: 'Without Helmet',
-    id: 2,
-  },
-};
-const windowWidth = Dimensions.get('window').width;
 const imageWidth = windowWidth;
 
 const App = () => {
-  const [predictedResult, setPredictedResult] = useState<{
-    boxes: number[][][];
-    scores: number[][];
-    classes: Int32Array;
-  }>({boxes: [[[]]], scores: [[]], classes: new Int32Array()});
-  const [detectionObjects, setDetectionObjects] = useState<
-    {
-      bbox: number[];
-      class: number;
-      label: string;
-      score: string;
-    }[]
-  >([]);
+  const [model, setModel] = useState<tf.GraphModel | null>(null);
+  const [predictedResult, setPredictedResult] = useState<Prediction>({
+    boxes: [[[]]],
+    scores: [[]],
+    classes: new Int32Array(),
+  });
+  const [detectionObjects, setDetectionObjects] = useState<DetectedObject[]>([]);
 
   const [imageUri, setImageUri] = useState<string | null>(null);
   const [isReadyToCapture, setIsReadyToCapture] = useState(false);
   const [isInferencing, setIsInferencing] = useState(false);
-  const [model, setModel] = useState<tf.GraphModel | null>(null);
 
-  const cameraRef = useRef();
+  const cameraRef = useRef<RNCamera>(null);
 
-  const inference = useCallback(
-    async (imageTensor: tf.Tensor3D) => {
-      if (!model) return;
-      if (!imageTensor || isInferencing) return;
-      try {
-        tf.engine().startScope();
-        console.log('inference begin');
-        const startTime = new Date().getTime();
+  const inference = async (imageTensor: tf.Tensor3D) => {
+    if (!model) return;
+    if (!imageTensor || isInferencing) return;
+    try {
+      tf.engine().startScope();
+      console.log('inference begin');
+      const startTime = new Date().getTime();
 
-        const predictions: tf.Tensor<tf.Rank>[] = (await model.executeAsync(
-          imageTensor.transpose([0, 1, 2]).expandDims(),
-        )) as tf.Tensor<tf.Rank>[];
+      const predictions: tf.Tensor<tf.Rank>[] = (await model.executeAsync(
+        imageTensor.transpose([0, 1, 2]).expandDims(),
+      )) as tf.Tensor<tf.Rank>[];
 
-        const endTime = new Date().getTime();
-        console.log(`inference end, ETC: ${endTime - startTime}ms`);
+      const endTime = new Date().getTime();
+      console.log(`inference end, ETC: ${endTime - startTime}ms`);
 
-        const boxes = predictions[5].arraySync() as number[][][];
-        const scores = predictions[1].arraySync() as number[][];
-        const classes = predictions[0].dataSync() as Int32Array;
+      const boxes = predictions[5].arraySync() as number[][][];
+      const scores = predictions[1].arraySync() as number[][];
+      const classes = predictions[0].dataSync<'int32'>();
 
-        setPredictedResult({boxes, scores, classes});
-      } catch (error) {
-        Alert.alert('', error, [{text: 'close', onPress: () => null}]);
-      } finally {
-        tf.engine().endScope();
-        setIsInferencing(false);
-      }
-    },
-    [isInferencing, model],
-  );
+      setPredictedResult({ boxes, scores, classes });
+    } catch (error) {
+      Alert.alert('', error, [{ text: 'close', onPress: () => null }]);
+    } finally {
+      tf.engine().endScope();
+      setIsInferencing(false);
+    }
+  };
 
   const onRefreshButtonPress = () => {
     setImageUri(null);
@@ -120,11 +79,7 @@ const App = () => {
   };
 
   const onShootButtonPress = async () => {
-    if (
-      cameraRef.current &&
-      cameraRef.current.getStatus() === 'READY' &&
-      isReadyToCapture
-    ) {
+    if (cameraRef.current && isReadyToCapture) {
       setIsReadyToCapture(false);
       const data = await cameraRef.current.takePictureAsync({
         width: 1080,
@@ -140,7 +95,7 @@ const App = () => {
     if (!imageUri) return;
     setIsInferencing(true);
 
-    const response = await fetch(imageUri, {}, {isBinary: true});
+    const response = await fetch(imageUri, {}, { isBinary: true });
     const imageDataArrayBuffer = await response.arrayBuffer();
     const imageData = new Uint8Array(imageDataArrayBuffer);
     const imageTensor = decodeJpeg(imageData);
@@ -151,12 +106,10 @@ const App = () => {
     const loadModel = async () => {
       try {
         await tf.ready();
-        const loadedModel = await loadGraphModel(
-          bundleResourceIO(modelJSON, modelWeights),
-        );
+        const loadedModel = await loadGraphModel(bundleResourceIO(modelJSON, modelWeights));
         setModel(loadedModel);
       } catch (error) {
-        Alert.alert('', error, [{text: 'close', onPress: () => null}]);
+        Alert.alert('', error, [{ text: 'close', onPress: () => null }]);
       }
     };
 
@@ -166,7 +119,7 @@ const App = () => {
   useEffect(() => {
     if (!predictedResult || !predictedResult.scores) return;
 
-    const {boxes, scores, classes} = predictedResult;
+    const { boxes, scores, classes } = predictedResult;
     const currentDetectionObjects: DetectedObject[] = [];
 
     scores[0].forEach((score, idx) => {
@@ -191,7 +144,7 @@ const App = () => {
       }
     });
 
-    console.log(currentDetectionObjects); // []
+    console.log(currentDetectionObjects);
     setDetectionObjects(currentDetectionObjects);
   }, [predictedResult]);
 
@@ -202,10 +155,7 @@ const App = () => {
         <Header />
         <View style={styles.body}>
           {imageUri === null && (
-            <CameraContainer
-              ref={cameraRef}
-              onCameraReady={() => setIsReadyToCapture(true)}
-            />
+            <CameraContainer ref={cameraRef} onCameraReady={() => setIsReadyToCapture(true)} />
           )}
           {imageUri !== null && (
             <View style={styles.imageContainer}>
@@ -221,7 +171,7 @@ const App = () => {
                     label={obj.label}
                   />
                 ))}
-              <Image source={{uri: imageUri}} style={styles.image} />
+              <Image source={{ uri: imageUri }} style={styles.image} />
             </View>
           )}
           <ControlPanel

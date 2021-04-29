@@ -1,6 +1,6 @@
 import * as tf from '@tensorflow/tfjs';
 
-export interface DetectedObject {
+interface DetectedObject {
   bbox: number[];
   class: number;
   label: string;
